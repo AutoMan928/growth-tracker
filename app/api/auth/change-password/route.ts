@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import bcrypt from "bcryptjs";
+import { writeFile } from "fs/promises";
+import path from "path";
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+
+  const { currentPassword, newPassword } = await req.json();
+  if (!currentPassword || !newPassword) {
+    return NextResponse.json({ success: false, error: "Missing fields" }, { status: 400 });
+  }
+  if (newPassword.length < 8) {
+    return NextResponse.json({ success: false, error: "密码至少 8 位" }, { status: 400 });
+  }
+
+  const currentHash = process.env.AUTH_PASSWORD_HASH ?? "";
+  const isValid = await bcrypt.compare(currentPassword, currentHash);
+  if (!isValid) {
+    return NextResponse.json({ success: false, error: "当前密码错误" }, { status: 400 });
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+
+  // Update .env file
+  const envPath = path.join(process.cwd(), ".env");
+  try {
+    const { readFile } = await import("fs/promises");
+    let content = await readFile(envPath, "utf-8");
+    if (content.includes("AUTH_PASSWORD_HASH=")) {
+      content = content.replace(/AUTH_PASSWORD_HASH=.*/g, `AUTH_PASSWORD_HASH="${newHash}"`);
+    } else {
+      content += `\nAUTH_PASSWORD_HASH="${newHash}"`;
+    }
+    await writeFile(envPath, content, "utf-8");
+    // Update runtime env
+    process.env.AUTH_PASSWORD_HASH = newHash;
+  } catch {
+    return NextResponse.json({ success: false, error: "无法更新密码文件" }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

@@ -1,0 +1,139 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @default("用户")
+  avatar    String?
+  createdAt DateTime @default(now())
+  settings  String   @default("{}")
+}
+
+model HealthRecord {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @default(now())
+  type      String
+  value     Float
+  unit      String
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model Habit {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?
+  icon        String     @default("⭐")
+  color       String     @default("#6366f1")
+  frequency   String     @default("daily")
+  targetDays  Int        @default(1)
+  category    String     @default("general")
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  logs        HabitLog[]
+}
+
+model HabitLog {
+  id        Int      @id @default(autoincrement())
+  habitId   Int
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime
+  completed Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([habitId, date])
+}
+
+model LearningRecord {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @default(now())
+  subject   String
+  content   String
+  duration  Int
+  type      String   @default("study")
+  tags      String   @default("[]")
+  rating    Int?     @default(3)
+  createdAt DateTime @default(now())
+}
+
+model WorkTask {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  status      String    @default("todo")
+  priority    String    @default("medium")
+  dueDate     DateTime?
+  completedAt DateTime?
+  project     String?
+  tags        String    @default("[]")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Goal {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  type        String    @default("short")
+  category    String    @default("personal")
+  targetDate  DateTime?
+  progress    Float     @default(0)
+  status      String    @default("active")
+  milestones  String    @default("[]")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model JournalEntry {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @default(now())
+  type      String   @default("evening")
+  mood      Int      @default(3)
+  content   String
+  gratitude String?
+  tomorrow  String?
+  tags      String   @default("[]")
+  createdAt DateTime @default(now())
+}
+
+model Reminder {
+  id        Int       @id @default(autoincrement())
+  title     String
+  message   String
+  type      String    @default("custom")
+  schedule  String
+  isActive  Boolean   @default(true)
+  lastFired DateTime?
+  nextFire  DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model FocusSession {
+  id        Int       @id @default(autoincrement())
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+  duration  Int?
+  planned   Int       @default(25)
+  type      String    @default("pomodoro")
+  taskId    Int?
+  note      String?
+  completed Boolean   @default(false)
+}
+
+model Achievement {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  title       String
+  description String
+  icon        String
+  unlockedAt  DateTime?
+  isUnlocked  Boolean   @default(false)
+}
