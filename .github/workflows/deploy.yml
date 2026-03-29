@@ -1,81 +1,60 @@
-name: Build & Deploy to Alibaba Cloud ECS
+name: Deploy to Alibaba Cloud ECS (PM2)
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
-
-env:
-  # 阿里云容器镜像仓库 (ACR) 地址 — 在 GitHub Secrets 中配置
-  ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}       # e.g. registry.cn-hangzhou.aliyuncs.com
-  ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}     # e.g. my-namespace
-  IMAGE_NAME: growth-tracker
+  workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
-      # 1. Checkout code
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # 2. Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 3. Login to Alibaba Cloud ACR
-      - name: Login to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      # 4. Build and push Docker image
-      - name: Build and Push Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # 5. Deploy to ECS via SSH
-      - name: Deploy to ECS
+      - name: Deploy to ECS via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ECS_HOST }}
           username: ${{ secrets.ECS_USER }}
           key: ${{ secrets.ECS_SSH_KEY }}
+          command_timeout: 15m
           script: |
-            # Pull latest image
-            docker login ${{ env.ACR_REGISTRY }} \
-              -u ${{ secrets.ACR_USERNAME }} \
-              -p ${{ secrets.ACR_PASSWORD }}
-            docker pull ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            set -e
+            PROJECT_DIR="/opt/growth-tracker"
 
-            # Stop and remove old container
-            docker stop growth-tracker 2>/dev/null || true
-            docker rm growth-tracker 2>/dev/null || true
+            # 首次部署：克隆仓库
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              echo "📦 首次部署，克隆仓库..."
+              git clone git@github.com:AutoMan928/growth-tracker.git $PROJECT_DIR
+            fi
 
-            # Run new container
-            docker run -d \
-              --name growth-tracker \
-              --restart unless-stopped \
-              -p 3000:3000 \
-              -v /opt/growth-tracker/data:/app/data \
-              -e DATABASE_URL="file:./data/growth.db" \
-              -e AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
-              -e AUTH_USERNAME="${{ secrets.AUTH_USERNAME }}" \
-              -e AUTH_PASSWORD_HASH="${{ secrets.AUTH_PASSWORD_HASH }}" \
-              -e NEXTAUTH_URL="${{ secrets.NEXTAUTH_URL }}" \
-              ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            cd $PROJECT_DIR
 
-            # Wait and verify
-            sleep 5
-            docker ps | grep growth-tracker && echo "✅ Deployment successful" || echo "❌ Deployment failed"
+            # 拉取最新代码
+            echo "⬇️  拉取最新代码..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 安装依赖
+            echo "📦 安装依赖..."
+            npm ci
+
+            # 生成 Prisma 客户端 + 初始化数据库
+            echo "🗄️  初始化数据库..."
+            npx prisma generate
+            npx prisma db push --skip-generate
+
+            # 构建
+            echo "🔨 构建项目..."
+            npm run build
+
+            # PM2 启动或重载
+            echo "🚀 启动/重载服务..."
+            if pm2 describe growth-tracker > /dev/null 2>&1; then
+              pm2 reload growth-tracker --update-env
+            else
+              pm2 start npm --name "growth-tracker" -- start
+              pm2 save
+            fi
+
+            echo "✅ 部署完成！"
