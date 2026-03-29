@@ -3,12 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["@prisma/client", "prisma"],
-  // 跳过构建时类型检查（服务器内存不足时使用）
+  // 跳过构建时 TypeScript 类型检查（节省服务器内存）
   typescript: {
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
 };
 
