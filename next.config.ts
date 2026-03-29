@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // 不用 standalone（PM2 直接 next start 即可）
   serverExternalPackages: ["@prisma/client", "prisma"],
-  // 跳过构建时 TypeScript 类型检查（节省服务器内存）
   typescript: {
     ignoreBuildErrors: true,
   },
