@@ -1,29 +1,35 @@
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/session";
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isLoginPage = req.nextUrl.pathname === "/login";
-  const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth");
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout"];
 
-  // Allow auth API routes
-  if (isApiAuth) return NextResponse.next();
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-  // Redirect logged-in users away from login page
-  if (isLoggedIn && isLoginPage) {
-    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
-  }
+  // 放行静态资源和公开路径
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  if (isPublic) return NextResponse.next();
 
-  // Redirect unauthenticated users to login
-  if (!isLoggedIn && !isLoginPage) {
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
+  // 验证 session
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    // 未登录 → 跳转登录页
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
+  // 已登录但访问 /login → 跳回首页
+  if (pathname === "/login") {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
   return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon-.*\\.svg|manifest\\.json).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|manifest\\.json|icon-.*\\.svg).*)",
+  ],
 };

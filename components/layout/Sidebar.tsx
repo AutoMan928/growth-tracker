@@ -8,7 +8,7 @@ import {
   LogOut, Settings,
 } from "lucide-react";
 import { useState } from "react";
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -26,7 +26,14 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <aside
@@ -105,7 +112,7 @@ export default function Sidebar() {
           {!collapsed && <span>设置</span>}
         </Link>
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={handleLogout}
           title={collapsed ? "退出登录" : undefined}
           className={cn(
             "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-indigo-300 hover:bg-white/10 hover:text-red-300 transition-all",
